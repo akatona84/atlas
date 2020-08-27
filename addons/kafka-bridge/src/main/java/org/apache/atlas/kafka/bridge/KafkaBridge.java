@@ -37,7 +37,6 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.configuration.Configuration;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.security.UserGroupInformation;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -69,22 +68,29 @@ public class KafkaBridge {
     private static final String CLUSTERNAME                = "clusterName";
     private static final String TOPIC                      = "topic";
 
-    private static final String FORMAT_KAKFA_TOPIC_QUALIFIED_NAME       = "%s@%s";
+    private static final String FORMAT_KAKFA_TOPIC_QUALIFIED_NAME = "%s@%s";
 
     private final List<String>  availableTopics;
     private final String        metadataNamespace;
     private final AtlasClientV2 atlasClientV2;
-    private final KafkaUtils    kafkaUtils;
+    private final KafkaUtils kafkaUtils;
 
+
+    public KafkaBridge(Configuration atlasConf, AtlasClientV2 atlasClientV2, KafkaUtils kafkaUtils) {
+        this.atlasClientV2 = atlasClientV2;
+        this.metadataNamespace = getMetadataNamespace(atlasConf);
+        this.kafkaUtils = kafkaUtils;
+        this.availableTopics = this.kafkaUtils.listAllTopics();
+    }
 
     public static void main(String[] args) {
         int exitCode = EXIT_CODE_FAILED;
         AtlasClientV2 atlasClientV2 = null;
-        KafkaBridge importer = null;
+        KafkaUtils kafkaUtils = null;
 
         try {
             Options options = new Options();
-            options.addOption("t","topic", true, "topic");
+            options.addOption("t", "topic", true, "topic");
             options.addOption("f", "filename", true, "filename");
 
             CommandLineParser parser        = new BasicParser();
@@ -108,20 +114,21 @@ public class KafkaBridge {
 
                 atlasClientV2 = new AtlasClientV2(ugi, ugi.getShortUserName(), urls);
             }
+            kafkaUtils = new KafkaUtils(atlasConf);
 
-            importer = new KafkaBridge(atlasConf, atlasClientV2);
-
+            KafkaBridge importer = new KafkaBridge(atlasConf, atlasClientV2, kafkaUtils);
             if (StringUtils.isNotEmpty(fileToImport)) {
                 File f = new File(fileToImport);
 
                 if (f.exists() && f.canRead()) {
-                    BufferedReader br   = new BufferedReader(new FileReader(f));
-                    String         line = null;
+                    try (BufferedReader br = new BufferedReader(new FileReader(f))) {
+                        String line = null;
 
-                    while((line = br.readLine()) != null) {
-                        topicToImport = line.trim();
+                        while ((line = br.readLine()) != null) {
+                            topicToImport = line.trim();
 
-                        importer.importTopic(topicToImport);
+                            importer.importTopic(topicToImport);
+                        }
                     }
 
                     exitCode = EXIT_CODE_SUCCESS;
@@ -134,7 +141,7 @@ public class KafkaBridge {
                 exitCode = EXIT_CODE_SUCCESS;
             }
         } catch(ParseException e) {
-            LOG.error("Failed to parse arguments. Error: ", e.getMessage());
+            LOG.error("Failed to parse arguments.", e);
             printUsage();
         } catch(Exception e) {
             System.out.println("ImportKafkaEntities failed. Please check the log file for the detailed error message");
@@ -144,25 +151,12 @@ public class KafkaBridge {
             if (atlasClientV2 != null) {
                 atlasClientV2.close();
             }
-            if (importer != null) {
-                importer.close();
+            if (kafkaUtils != null) {
+                kafkaUtils.close();
             }
         }
 
         System.exit(exitCode);
-    }
-
-    public KafkaBridge(Configuration atlasConf, AtlasClientV2 atlasClientV2) throws Exception {
-        this.atlasClientV2     = atlasClientV2;
-        this.metadataNamespace = getMetadataNamespace(atlasConf);
-        this.kafkaUtils        = new KafkaUtils(atlasConf);
-        this.availableTopics   = kafkaUtils.listAllTopics();
-    }
-
-    public void close() {
-        if (this.kafkaUtils != null) {
-            this.kafkaUtils.close();
-        }
     }
 
     private String getMetadataNamespace(Configuration config) {

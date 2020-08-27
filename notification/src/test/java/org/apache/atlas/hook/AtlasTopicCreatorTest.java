@@ -18,172 +18,147 @@
 
 package org.apache.atlas.hook;
 
-import kafka.utils.ZkUtils;
 import org.apache.atlas.AtlasConfiguration;
+import org.apache.atlas.utils.KafkaUtils;
 import org.apache.commons.configuration.Configuration;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
+import org.mockito.MockitoAnnotations;
+import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
+
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyInt;
+import static org.mockito.Matchers.anyShort;
+import static org.mockito.Matchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.testng.Assert.assertFalse;
-import static org.testng.Assert.assertTrue;
 
 public class AtlasTopicCreatorTest {
 
     private final String ATLAS_HOOK_TOPIC     = AtlasConfiguration.NOTIFICATION_HOOK_TOPIC_NAME.getString();
     private final String ATLAS_ENTITIES_TOPIC = AtlasConfiguration.NOTIFICATION_ENTITIES_TOPIC_NAME.getString();
 
-//    @Test
+    @Test
     public void shouldNotCreateAtlasTopicIfNotConfiguredToDoSo() {
 
         Configuration configuration = mock(Configuration.class);
         when(configuration.getBoolean(AtlasTopicCreator.ATLAS_NOTIFICATION_CREATE_TOPICS_KEY, true)).
                 thenReturn(false);
         when(configuration.getString("atlas.authentication.method.kerberos")).thenReturn("false");
-        final boolean[] topicExistsCalled = new boolean[] {false};
+
+        final KafkaUtils mockKafkaUtils = mock(KafkaUtils.class);
+
         AtlasTopicCreator atlasTopicCreator = new AtlasTopicCreator() {
-//            @Override
-            protected boolean ifTopicExists(String topicName, ZkUtils zkUtils) {
-                topicExistsCalled[0] = true;
-                return false;
+            @Override
+            KafkaUtils createKafkaUtils(Configuration atlasProperties) {
+                return mockKafkaUtils;
             }
         };
         atlasTopicCreator.createAtlasTopic(configuration, ATLAS_HOOK_TOPIC);
-        assertFalse(topicExistsCalled[0]);
+        verify(mockKafkaUtils, never()).createTopics(any(), anyInt(), anyShort());
     }
 
-//    @Test
+    @Test
     public void shouldNotCreateTopicIfItAlreadyExists() {
         Configuration configuration = mock(Configuration.class);
         when(configuration.getBoolean(AtlasTopicCreator.ATLAS_NOTIFICATION_CREATE_TOPICS_KEY, true)).
                 thenReturn(true);
         when(configuration.getString("atlas.authentication.method.kerberos")).thenReturn("false");
-        final ZkUtils zookeeperUtils = mock(ZkUtils.class);
-        final boolean[] topicExistsCalled = new boolean[]{false};
-        final boolean[] createTopicCalled = new boolean[]{false};
+
+        final KafkaUtils mockKafkaUtils = mock(KafkaUtils.class);
+        when(mockKafkaUtils.listAllTopics()).thenReturn(Collections.singletonList(ATLAS_HOOK_TOPIC));
 
         AtlasTopicCreator atlasTopicCreator = new AtlasTopicCreator() {
-//            @Override
-            protected boolean ifTopicExists(String topicName, ZkUtils zkUtils) {
-                topicExistsCalled[0] = true;
-                return true;
-            }
-
-//            @Override
-            protected ZkUtils createZkUtils(Configuration atlasProperties) {
-                return zookeeperUtils;
-            }
-
-//            @Override
-            protected void createTopic(Configuration atlasProperties, String topicName, ZkUtils zkUtils) {
-                createTopicCalled[0] = true;
+            @Override
+            KafkaUtils createKafkaUtils(Configuration atlasProperties) {
+                return mockKafkaUtils;
             }
         };
+
         atlasTopicCreator.createAtlasTopic(configuration, ATLAS_HOOK_TOPIC);
-        assertTrue(topicExistsCalled[0]);
-        assertFalse(createTopicCalled[0]);
+
+        verify(mockKafkaUtils, never()).createTopics(any(), anyInt(), anyShort());
     }
 
-//    @Test
+    @Test
     public void shouldCreateTopicIfItDoesNotExist() {
         Configuration configuration = mock(Configuration.class);
         when(configuration.getBoolean(AtlasTopicCreator.ATLAS_NOTIFICATION_CREATE_TOPICS_KEY, true)).
                 thenReturn(true);
         when(configuration.getString("atlas.authentication.method.kerberos")).thenReturn("false");
-        final ZkUtils zookeeperUtils = mock(ZkUtils.class);
 
-        final boolean[] createdTopic = new boolean[]{false};
+        final KafkaUtils mockKafkaUtils = mock(KafkaUtils.class);
+        when(mockKafkaUtils.listAllTopics()).thenReturn(Collections.emptyList());
 
         AtlasTopicCreator atlasTopicCreator = new AtlasTopicCreator() {
-//            @Override
-            protected boolean ifTopicExists(String topicName, ZkUtils zkUtils) {
-                return false;
-            }
-
-//            @Override
-            protected ZkUtils createZkUtils(Configuration atlasProperties) {
-                return zookeeperUtils;
-            }
-
-//            @Override
-            protected void createTopic(Configuration atlasProperties, String topicName, ZkUtils zkUtils) {
-                createdTopic[0] = true;
+            @Override
+            KafkaUtils createKafkaUtils(Configuration atlasProperties) {
+                return mockKafkaUtils;
             }
         };
+
         atlasTopicCreator.createAtlasTopic(configuration, ATLAS_HOOK_TOPIC);
-        assertTrue(createdTopic[0]);
+
+        verify(mockKafkaUtils).createTopics(eq(Collections.singletonList(ATLAS_HOOK_TOPIC)), anyInt(), anyShort());
     }
 
-//    @Test
+    @Test
     public void shouldNotFailIfExceptionOccursDuringCreatingTopic() {
         Configuration configuration = mock(Configuration.class);
         when(configuration.getBoolean(AtlasTopicCreator.ATLAS_NOTIFICATION_CREATE_TOPICS_KEY, true)).
                 thenReturn(true);
         when(configuration.getString("atlas.authentication.method.kerberos")).thenReturn("false");
-        final ZkUtils zookeeperUtils = mock(ZkUtils.class);
-        final boolean[] createTopicCalled = new boolean[]{false};
+
+        final KafkaUtils mockKafkaUtils = mock(KafkaUtils.class);
+        when(mockKafkaUtils.listAllTopics()).thenReturn(Collections.emptyList());
+        doThrow(new RuntimeException("Simulating failure during creating topic"))
+                .when(mockKafkaUtils).createTopics(any(), anyInt(), anyShort());
 
         AtlasTopicCreator atlasTopicCreator = new AtlasTopicCreator() {
-//            @Override
-            protected boolean ifTopicExists(String topicName, ZkUtils zkUtils) {
-                return false;
-            }
-
-//            @Override
-            protected ZkUtils createZkUtils(Configuration atlasProperties) {
-                return zookeeperUtils;
-            }
-
-//            @Override
-            protected void createTopic(Configuration atlasProperties, String topicName, ZkUtils zkUtils) {
-                createTopicCalled[0] = true;
-                throw new RuntimeException("Simulating failure during creating topic");
+            @Override
+            KafkaUtils createKafkaUtils(Configuration atlasProperties) {
+                return mockKafkaUtils;
             }
         };
+
         atlasTopicCreator.createAtlasTopic(configuration, ATLAS_HOOK_TOPIC);
-        assertTrue(createTopicCalled[0]);
+
+        verify(mockKafkaUtils).createTopics(eq(Collections.singletonList(ATLAS_HOOK_TOPIC)), anyInt(), anyShort());
     }
 
-//    @Test
+    @Test
     public void shouldCreateMultipleTopics() {
         Configuration configuration = mock(Configuration.class);
         when(configuration.getBoolean(AtlasTopicCreator.ATLAS_NOTIFICATION_CREATE_TOPICS_KEY, true)).
                 thenReturn(true);
         when(configuration.getString("atlas.authentication.method.kerberos")).thenReturn("false");
-        final ZkUtils zookeeperUtils = mock(ZkUtils.class);
 
-        final Map<String, Boolean> createdTopics = new HashMap<>();
-        createdTopics.put(ATLAS_HOOK_TOPIC, false);
-        createdTopics.put(ATLAS_ENTITIES_TOPIC, false);
+        final KafkaUtils mockKafkaUtils = mock(KafkaUtils.class);
+        when(mockKafkaUtils.listAllTopics()).thenReturn(Collections.emptyList());
 
         AtlasTopicCreator atlasTopicCreator = new AtlasTopicCreator() {
-
-//            @Override
-            protected boolean ifTopicExists(String topicName, ZkUtils zkUtils) {
-                return false;
-            }
-
-//            @Override
-            protected ZkUtils createZkUtils(Configuration atlasProperties) {
-                return zookeeperUtils;
-            }
-
-//            @Override
-            protected void createTopic(Configuration atlasProperties, String topicName, ZkUtils zkUtils) {
-                createdTopics.put(topicName, true);
+            @Override
+            KafkaUtils createKafkaUtils(Configuration atlasProperties) {
+                return mockKafkaUtils;
             }
         };
+
         atlasTopicCreator.createAtlasTopic(configuration, ATLAS_HOOK_TOPIC, ATLAS_ENTITIES_TOPIC);
-        assertTrue(createdTopics.get(ATLAS_HOOK_TOPIC));
-        assertTrue(createdTopics.get(ATLAS_ENTITIES_TOPIC));
+
+        verify(mockKafkaUtils).createTopics(eq(Arrays.asList(ATLAS_HOOK_TOPIC, ATLAS_ENTITIES_TOPIC)), anyInt(), anyShort());
     }
 
-//    @Test
+    /* TODO: this should be moved to KafkaUtils somehow, logic changed, all topics are sent once in a list to KafkaUtils.createTopics, this logic is handle in that
+    @Test
     public void shouldCreateTopicEvenIfEarlierOneFails() {
         Configuration configuration = mock(Configuration.class);
         when(configuration.getBoolean(AtlasTopicCreator.ATLAS_NOTIFICATION_CREATE_TOPICS_KEY, true)).
@@ -196,17 +171,17 @@ public class AtlasTopicCreatorTest {
 
         AtlasTopicCreator atlasTopicCreator = new AtlasTopicCreator() {
 
-//            @Override
+            @Override
             protected boolean ifTopicExists(String topicName, ZkUtils zkUtils) {
                 return false;
             }
 
-//            @Override
+            @Override
             protected ZkUtils createZkUtils(Configuration atlasProperties) {
                 return zookeeperUtils;
             }
 
-//            @Override
+            @Override
             protected void createTopic(Configuration atlasProperties, String topicName, ZkUtils zkUtils) {
                 if (topicName.equals(ATLAS_HOOK_TOPIC)) {
                     throw new RuntimeException("Simulating failure when creating ATLAS_HOOK topic");
@@ -218,33 +193,28 @@ public class AtlasTopicCreatorTest {
         atlasTopicCreator.createAtlasTopic(configuration, ATLAS_HOOK_TOPIC, ATLAS_ENTITIES_TOPIC);
         assertTrue(createdTopics.get(ATLAS_ENTITIES_TOPIC));
     }
+    */
 
-//    @Test
+    @Test
     public void shouldCloseResources() {
         Configuration configuration = mock(Configuration.class);
         when(configuration.getBoolean(AtlasTopicCreator.ATLAS_NOTIFICATION_CREATE_TOPICS_KEY, true)).
                 thenReturn(true);
         when(configuration.getString("atlas.authentication.method.kerberos")).thenReturn("false");
-        final ZkUtils zookeeperUtils = mock(ZkUtils.class);
+
+        final KafkaUtils mockKafkaUtils = mock(KafkaUtils.class);
+        when(mockKafkaUtils.listAllTopics()).thenReturn(Collections.emptyList());
 
         AtlasTopicCreator atlasTopicCreator = new AtlasTopicCreator() {
-//            @Override
-            protected boolean ifTopicExists(String topicName, ZkUtils zkUtils) {
-                return false;
-            }
-
-//            @Override
-            protected ZkUtils createZkUtils(Configuration atlasProperties) {
-                return zookeeperUtils;
-            }
-
-//            @Override
-            protected void createTopic(Configuration atlasProperties, String topicName, ZkUtils zkUtils) {
+            @Override
+            KafkaUtils createKafkaUtils(Configuration atlasProperties) {
+                return mockKafkaUtils;
             }
         };
+
         atlasTopicCreator.createAtlasTopic(configuration, ATLAS_HOOK_TOPIC, ATLAS_ENTITIES_TOPIC);
 
-        verify(zookeeperUtils, times(1)).close();
+        verify(mockKafkaUtils).close();
     }
 
     @Test
@@ -252,34 +222,24 @@ public class AtlasTopicCreatorTest {
         Configuration configuration = mock(Configuration.class);
         when(configuration.getBoolean(AtlasTopicCreator.ATLAS_NOTIFICATION_CREATE_TOPICS_KEY, true)).
                 thenReturn(true);
-        final ZkUtils zookeeperUtils = mock(ZkUtils.class);
-        final Map<String, Boolean> createdTopics = new HashMap<>();
-        createdTopics.put(ATLAS_HOOK_TOPIC, false);
-        createdTopics.put(ATLAS_ENTITIES_TOPIC, false);
+
+        final KafkaUtils mockKafkaUtils = mock(KafkaUtils.class);
+        when(mockKafkaUtils.listAllTopics()).thenReturn(Collections.emptyList());
 
         AtlasTopicCreator atlasTopicCreator = new AtlasTopicCreator() {
-//            @Override
-            protected boolean ifTopicExists(String topicName, ZkUtils zkUtils) {
-                return false;
+            @Override
+            KafkaUtils createKafkaUtils(Configuration atlasProperties) {
+                return mockKafkaUtils;
             }
 
-//            @Override
-            protected ZkUtils createZkUtils(Configuration atlasProperties) {
-                return zookeeperUtils;
-            }
-
-//            @Override
-            protected void createTopic(Configuration atlasProperties, String topicName, ZkUtils zkUtils) {
-                createdTopics.put(topicName, true);
-            }
-
-//            @Override
-            protected boolean handleSecurity(Configuration atlasProperties) {
+            @Override
+            boolean handleSecurity(Configuration atlasProperties) {
                 return false;
             }
         };
+
         atlasTopicCreator.createAtlasTopic(configuration, ATLAS_HOOK_TOPIC, ATLAS_ENTITIES_TOPIC);
-        assertFalse(createdTopics.get(ATLAS_HOOK_TOPIC));
-        assertFalse(createdTopics.get(ATLAS_ENTITIES_TOPIC));
+
+        verify(mockKafkaUtils, never()).createTopics(any(), anyInt(), anyShort());
     }
 }

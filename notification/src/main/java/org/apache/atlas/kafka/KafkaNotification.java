@@ -25,14 +25,13 @@ import org.apache.atlas.notification.AbstractNotification;
 import org.apache.atlas.notification.NotificationConsumer;
 import org.apache.atlas.notification.NotificationException;
 import org.apache.atlas.service.Service;
-import org.apache.atlas.utils.KafkaUtils;
 import org.apache.commons.configuration.Configuration;
 import org.apache.commons.configuration.ConfigurationConverter;
 import org.apache.commons.lang.StringUtils;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
@@ -42,12 +41,19 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import javax.inject.Inject;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.Future;
 
-import static org.apache.atlas.security.SecurityProperties.TRUSTSTORE_PASSWORD_KEY;
+
 import static org.apache.atlas.security.SecurityProperties.TLS_ENABLED;
+import static org.apache.atlas.security.SecurityProperties.TRUSTSTORE_PASSWORD_KEY;
 import static org.apache.atlas.security.SecurityUtil.getPassword;
+import static org.apache.atlas.utils.KafkaUtils.setKafkaJAASProperties;
 
 /**
  * Kafka specific access point to the Atlas notification framework.
@@ -132,7 +138,7 @@ public class KafkaNotification extends AbstractNotification implements Service {
         // if no value is specified for max.poll.records, set to 1
         properties.put("max.poll.records", kafkaConf.getInt("max.poll.records", 1));
 
-        KafkaUtils.setKafkaJAASProperties(applicationProperties, properties);
+        setKafkaJAASProperties(applicationProperties, properties);
 
         LOG.info("<== KafkaNotification()");
     }

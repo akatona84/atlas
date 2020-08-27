@@ -31,7 +31,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * A class to create Kafka topics used by Atlas components.
@@ -61,21 +64,33 @@ public class AtlasTopicCreator {
             if (!handleSecurity(atlasProperties)) {
                 return;
             }
-            try(KafkaUtils kafkaUtils = new KafkaUtils(atlasProperties)) {
-                int numPartitions = atlasProperties.getInt("atlas.notification.hook.numthreads", 1);
-                int numReplicas = atlasProperties.getInt("atlas.notification.replicas", 1);
-                kafkaUtils.createTopics(Arrays.asList(topicNames), numPartitions, numReplicas);
+            try (KafkaUtils kafkaUtils = createKafkaUtils(atlasProperties)) {
+                List<String> existingTopics = kafkaUtils.listAllTopics();
+                List<String> nonExistingTopicNames = new ArrayList<>(Arrays.asList(topicNames));
+                nonExistingTopicNames.removeAll(existingTopics);
+                if (!nonExistingTopicNames.isEmpty()) {
+                    int numPartitions = atlasProperties.getInt("atlas.notification.hook.numthreads", 1);
+                    short numReplicas = atlasProperties.getShort("atlas.notification.replicas", (short) 1);
+                    kafkaUtils.createTopics(nonExistingTopicNames, numPartitions, numReplicas);
+                }
             } catch (Exception e) {
-                LOG.error("Error while creating topics e :" + e.getMessage(), e);
+                LOG.error("Error while creating topics", e);
             }
         } else {
-            LOG.info("Not creating topics {} as {} is false", StringUtils.join(topicNames, ","),
-                    ATLAS_NOTIFICATION_CREATE_TOPICS_KEY);
+            if (LOG.isInfoEnabled()) {
+                LOG.info("Not creating topics {} as {} is false", StringUtils.join(topicNames, ","),
+                        ATLAS_NOTIFICATION_CREATE_TOPICS_KEY);
+            }
         }
     }
 
     @VisibleForTesting
-    protected boolean handleSecurity(Configuration atlasProperties) {
+    KafkaUtils createKafkaUtils(Configuration atlasProperties) {
+        return new KafkaUtils(atlasProperties);
+    }
+
+    @VisibleForTesting
+    boolean handleSecurity(Configuration atlasProperties) {
         if (AuthenticationUtil.isKerberosAuthenticationEnabled(atlasProperties)) {
             String kafkaPrincipal = atlasProperties.getString("atlas.notification.kafka.service.principal");
             String kafkaKeyTab = atlasProperties.getString("atlas.notification.kafka.keytab.location");
