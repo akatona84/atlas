@@ -127,6 +127,19 @@
             <groupId>org.apache.atlas</groupId>
             <artifactId>atlas-notification</artifactId>
         </dependency>
+        <!-- kafka core dependency is no longer part of atlas-notification but NotificationHookConsumer requires it -->
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka_${kafka.scala.binary.version}</artifactId>
+        </dependency>
+        <!-- EmbeddedKafkaServer is moved to test sources in notification -->
+        <dependency>
+            <groupId>org.apache.atlas</groupId>
+            <artifactId>atlas-notification</artifactId>
+            <classifier>tests</classifier>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
 
         <dependency>
             <groupId>org.apache.atlas</groupId>
